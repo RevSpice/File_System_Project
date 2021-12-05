@@ -1,5 +1,5 @@
 #define _GNU_SOURCE
-//hello from jack
+
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -43,10 +43,6 @@ struct inode
 	uint8_t valid;
 	uint32_t blocks[MAX_BLOCKS_PER_FILE];
 	int size;
-	
-	//attribute variables
-	uint8_t hidden;
-	uint8_t readonly;
 };	
 
 struct directory_entry *directory_ptr;
@@ -170,15 +166,30 @@ int df()
 	return free;
 }
 
+int findFreeInodeBlockEntry(int inode_index)
+{
+	int i;
+	int retval = -1;
+	for(i = 0; i < MAX_BLOCKS_PER_FILE; i++)
+	{
+		if(inode_array_ptr[inode_index].blocks[i] == -1)
+		{
+			retval = i;
+			return retval;
+		}
+	}
+	return retval;
+}
+
 int nameSearchDir(char *filename)
 {
     int i;
     int retval = -1;
     for (i = 0; i < NUM_FILES; i++) 
 	{
-        if (strncmp(filename, directory_ptr[i].name, 255) == 0) 
+        if (strcmp(filename, directory_ptr[i].name) == 0) 
 		{
-            return i;
+            retval = i;
         }
     }
     return retval;	
@@ -197,27 +208,29 @@ int put(char *filename)
 	
 	if(buf.st_size > df())
 	{
-		printf("put error: Not enough room in the file system \n");
+		printf("Error: Not enough room in the file system \n");
 		return -1;
 	}
 	
 	int dir_idx = findFreeDirectoryEntry();
+	printf("dir idx: %d\n", dir_idx);
 	
 	if(dir_idx == -1)
 	{
-		printf("put error: Not enough room in the file system \n");
+		printf("Error: Not enough room in the file system \n");
 		return -1;
 	}
 
 	directory_ptr[dir_idx].valid = 1;
 	directory_ptr[dir_idx].name = (char *)malloc(strlen(filename));
-	//strncpy(directory_ptr[dir_idx].name, filename, strlen(filename));
-	strcpy(directory_ptr[dir_idx].name, filename);
+	strncpy(directory_ptr[dir_idx].name, filename, strlen(filename));
+	printf("Filename put: %s\n", directory_ptr[dir_idx].name);
 	
 	int inode_idx = findFreeInode();
+	printf("inode idx: %d\n", inode_idx);
 	if(inode_idx == -1)
 	{
-		printf("put error: No free inodes\n");
+		printf("Error: No free inodes\n");
 		return -1;
 	}	
 	
@@ -228,10 +241,10 @@ int put(char *filename)
 	inode_array_ptr[inode_idx].valid = 1;
 	
 	FILE *ifp = fopen(filename, "r");
-
+	printf("Reading %d bytes from %s\n", (int) buf . st_size, filename );
 	
 	int copy_size = buf.st_size;
-
+	printf("copysize: %d\n", copy_size);
 	int offset = 0;
 	int block_pos = 0; //to keep track of blocks in inode
 	int block_index;
@@ -249,6 +262,14 @@ int put(char *filename)
 		}
 		
 		used_blocks[block_index] = 1;
+		//int inode_block_entry = findFreeInodeBlockEntry(inode_idx);
+		//if(inode_block_entry == -1)
+		//{
+		//	printf("Error: Can't find free block\n");
+		//	//Cleanup a bunch of directory and inode stuff
+			//return;
+		//}	
+		//inode_array_ptr[inode_idx].blocks[inode_block_entry] = block_index;
 		
 		fseek(ifp, offset, SEEK_SET);
 		int bytes = fread(data_blocks[block_index], BLOCK_SIZE, 1, ifp);
@@ -265,46 +286,78 @@ int put(char *filename)
 		inode_array_ptr[inode_idx].blocks[block_pos] = block_index;
         block_pos++;
 	}
-
+	/*
+	if(copy_size > 0)
+	{
+		//handle remainder
+		int block_index = findFreeBlock();
+		
+		if(block_index == -1)
+		{
+			printf("Error: Can't find free block\n");
+			//Cleanup a bunch of directory and inode stuff
+			return;
+		}
+		used_blocks[block_index] = 1;
+		int inode_block_entry = findFreeInodeBlockEntry(inode_idx);
+		if(inode_block_entry == -1)
+		{
+			printf("Error: Can't find free block\n");
+			//Cleanup a bunch of directory and inode stuff
+			return;
+		}	
+		inode_array_ptr[inode_idx].blocks[inode_block_entry] = block_index;		
+		fseek(ifp, offset, SEEK_SET);
+		int bytes = fread(data_blocks[block_index], copy_size, 1, ifp);
+		
+		if( bytes == 0 && !feof( ifp ) )
+		{
+			printf("An error occured reading from the input file.\n");
+			return;
+		}
+		clearerr(ifp);
+		
+		copy_size -= BLOCK_SIZE;
+		offset += BLOCK_SIZE;
+		
+		inode_array_ptr[inode_idx].blocks[block_pos] = block_index;
+        block_pos++;		
+	}
+	*/
 	fclose(ifp);
 	return 0;
 }
 
 
-int get(char *filename, char *newfilename)
+void get(char *filename, char *newfilename, int argc,  char *argv[])
 {
-	FILE *ofp;
-    ofp = fopen(newfilename, "w");
-
+    FILE *ofp;
+    ofp = fopen(argv[2], "w");
+    int dir_idx = nameSearchDir(filename);
+    int inode_idx = directory_ptr[dir_idx].inode_idx;
+	
     if( ofp == NULL )
     {
-      printf("Could not open output file: %s\n", newfilename );
+      printf("Could not open output file: %s\n", argv[2] );
       perror("Opening output file returned");
-      return -1;
+      return ;
     }
-
-    // Initialize our offsets and pointers just we did above when reading from the file.
-    int dir_idx = nameSearchDir(filename);
-	if(dir_idx == -1)
-		printf("get: File not found in directory.\n");
 
 	struct stat buf;
 	int status = stat(filename, &buf);
 	if(status == -1)
 	{
 		printf("Error: File not found.\n");
-		return -1;
+		return;
 	}
-	
-	int block_pos = 0;
-	int inode_idx = directory_ptr[dir_idx].inode_idx;
-	int block_index = inode_array_ptr[inode_idx].blocks[block_pos];
-	
+
+    // Initialize our offsets and pointers just we did above when reading from the file.
+    int block_index = nameSearchDir(filename);
     int copy_size   = buf.st_size;
     int offset      = 0;
-	
+	int block_pos = 0;
 
-    //printf("Writing %d bytes to %s\n", (int) buf . st_size, newfilename );
+    //printf("Writing %d bytes to %s\n", (int) buf . st_size, argv[2] );
 
 
     while( copy_size > 0 )
@@ -326,16 +379,14 @@ int get(char *filename, char *newfilename)
       copy_size -= BLOCK_SIZE;
       offset    += BLOCK_SIZE;
 
-	block_pos++;
-	block_index = inode_array_ptr[inode_idx].blocks[block_pos];	      
+		inode_array_ptr[inode_idx].blocks[block_pos] = block_index;
+		block_pos++;	      
 
       fseek( ofp, offset, SEEK_SET );
     }
 
     // Close the output file, we're done. 
     fclose( ofp );
-	
-	return 0;
 }
 
 void del(char *filename)
@@ -343,16 +394,11 @@ void del(char *filename)
 	int dir_idx = nameSearchDir(filename);
 	int inode_idx = directory_ptr[dir_idx].inode_idx;
 	
-	if(inode_array_ptr[inode_idx].readonly == 1)
-	{
-		printf("del: That file is marked read-only.\n");
-		return;
-	}	
-	
 	int i;
 	for(i = 0; i < sizeof(inode_array_ptr[inode_idx].blocks); i++)
 	{
 		used_blocks[i] = 0;
+		//set block index to -1??
 	}
 	
 	inode_array_ptr[inode_idx].valid = 0;
@@ -363,56 +409,29 @@ void del(char *filename)
 	directory_ptr[dir_idx].name = NULL;
 }	
 
+
+//void fcreate()
+
 void list()
 {
 	int i;
 	int count = 0;
 	for(i = 0; i < NUM_FILES; i++)
 	{
-		if(directory_ptr[i].valid == 1 && inode_array_ptr[directory_ptr[i].inode_idx].hidden == 0)
+		if(directory_ptr[i].valid == 1)
 		{
 			int inode_index = directory_ptr[i].inode_idx;
-			char *time = ctime(&(inode_array_ptr[inode_index].date));
-			time[strcspn(time, "\n")] = '\0';
-            printf("%d %s %s\n", inode_array_ptr[inode_index].size, time, directory_ptr[i].name);
+            printf("%d %s %s\n", inode_array_ptr[inode_index].size, ctime(&(inode_array_ptr[inode_index].date)), directory_ptr[i].name);
 			count++;
 		}	
 	}
 	
 	if(count == 0)
 	{
-		printf("No files found.\n");
+		printf("\nNo files found.\n");
 		return;
 	}
-}
-
-void attrib(char *attribute, char *filename)
-{
-	int dir_idx = nameSearchDir(filename);
-	if(dir_idx == -1)
-	{	
-		printf("attrib: File not found in directory.\n");
-	}
-	
-	int inode_idx = directory_ptr[dir_idx].inode_idx;
-	
-	if(strcmp(attribute, "+h") == 0)
-	{
-		inode_array_ptr[inode_idx].hidden = 1;
-	}	
-	else if(strcmp(attribute, "+r") == 0)
-	{
-		inode_array_ptr[inode_idx].readonly = 1;
-	}
-	else if(strcmp(attribute, "-h") == 0)
-	{
-		inode_array_ptr[inode_idx].hidden = 0;
-	}
-	else if(strcmp(attribute, "-r") == 0)
-	{
-		inode_array_ptr[inode_idx].readonly = 0;
-	}
-	
+printf("Count: %d\n",count);	
 }	
 
 int main()
@@ -484,36 +503,21 @@ int main()
 	else if(strcmp(token[0], "list") == 0)
 	{
 		list();
-	}
-	else if(strcmp(token[0], "get") == 0)
-	{
-		if(token_count == 4)
-		{	
-			get(token[1], token[2]);
-		}
-		else
-		{
-			get(token[1], token[1]);
-		}	
-	}
-	else if(strcmp(token[0], "del") == 0)
-	{
-		del(token[1]);
-	}
-	else if(strcmp(token[0], "df") == 0)
-	{
-		df();
-		printf("Disk free: %d bytes\n", df());
-	}
-	else if(strcmp(token[0], "attrib") == 0)
-	{
-		attrib(token[1], token[2]);
 	}	
 	else if(strcmp(token[0], "quit") == 0)
 	{
 		exit(0);
 	}
-
+    // Now print the tokenized input as a debug check
+    // \TODO Remove this code and replace with your shell functionality
+	/*
+    int token_index  = 0;
+    for( token_index = 0; token_index < token_count; token_index ++ ) 
+    {
+      printf("token[%d] = %s", token_index, token[token_index] );  
+    }
+	*/
+	printf("\n Disk free: %d bytes\n", df());
     free( working_root );
 
   }
