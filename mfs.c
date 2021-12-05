@@ -31,7 +31,7 @@ uint8_t data_blocks[NUM_BLOCKS][BLOCK_SIZE];
 uint8_t *used_blocks;
 
 FILE *disk_image;
-char *image_name;
+char image_name[255];
 
 struct directory_entry
 {
