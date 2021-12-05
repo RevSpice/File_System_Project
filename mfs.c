@@ -30,6 +30,9 @@
 uint8_t data_blocks[NUM_BLOCKS][BLOCK_SIZE];
 uint8_t *used_blocks;
 
+FILE *disk_image;
+char *image_name;
+
 struct directory_entry
 {
 	char *name;
@@ -413,7 +416,34 @@ void attrib(char *attribute, char *filename)
 		inode_array_ptr[inode_idx].readonly = 0;
 	}
 	
-}	
+}
+
+void createfs(char *filename)
+{
+	printf("file: %s\n", filename);
+	memset(image_name, 0, 255);
+	printf("image: %s\n", image_name);
+	disk_image = fopen(filename, "w");
+	int i, j;
+	for(i = 0; i < NUM_BLOCKS; i ++)
+	{
+		for(j = 0; j < BLOCK_SIZE; j++)
+		{
+			data_blocks[i][j] = 0;
+		}
+	}
+
+	fwrite(data_blocks, BLOCK_SIZE, NUM_BLOCKS, disk_image);
+	fclose(disk_image);
+	strcpy(image_name, filename);
+}
+
+void savefs()
+{
+	disk_image = fopen(image_name, "w");
+	fwrite(data_blocks, BLOCK_SIZE, NUM_BLOCKS, disk_image);
+	fclose(disk_image);	
+}
 
 int main()
 {
