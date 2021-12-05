@@ -537,8 +537,25 @@ int main()
 	}
 	else if(strcmp(token[0], "attrib") == 0)
 	{
-		attrib(token[1], token[2]);
-	}	
+		if(token_count != 4)
+		{
+			printf("attrib error: filename or attribute missing in input. Please put in both.\n");
+			continue;
+		}
+		else
+		{	
+			attrib(token[1], token[2]);
+			attrib(token[1], token[2]);
+		}	
+	}
+	else if(strcmp(token[0], "createfs") == 0)
+	{
+		createfs(token[1]);
+	}
+	else if(strcmp(token[0], "savefs") == 0)
+	{
+		savefs();
+	}  
 	else if(strcmp(token[0], "quit") == 0)
 	{
 		exit(0);
